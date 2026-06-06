@@ -41,11 +41,11 @@ export const createPurchaseOrder = async (req, res) => {
       return res.status(400).json({ message: 'Cannot generate a Purchase Order for a quotation that is not approved.' });
     }
 
-    // 4. Calculate Tax and Total
-    const subtotal = parseFloat(quote.pricing_details);
+    // 4. Calculate Tax and Total (pricing_details is already the grand total of the quote)
+    const totalCalculation = parseFloat(quote.pricing_details);
     const taxRate = parseFloat(quote.tax_gst_percent || 18.00) / 100;
-    const taxCalculation = parseFloat((subtotal * taxRate).toFixed(2));
-    const totalCalculation = parseFloat((subtotal + taxCalculation).toFixed(2));
+    const subtotal = totalCalculation / (1 + taxRate);
+    const taxCalculation = parseFloat((totalCalculation - subtotal).toFixed(2));
 
     const poNumber = generatePONumber();
 
@@ -330,10 +330,15 @@ export const getPurchaseOrders = async (req, res) => {
   try {
     const [pos] = await db.query(`
       SELECT 
+        po.id,
         po.id AS po_id,
         po.po_number,
         po.total_calculation,
+        po.status,
         po.status AS po_status,
+        po.l1_status,
+        po.l2_status,
+        po.created_at,
         po.created_at AS po_date,
         vendor.name AS vendor_name
       FROM purchase_orders po

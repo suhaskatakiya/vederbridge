@@ -33,6 +33,17 @@ async function run() {
 
   const users = [
     {
+      name: 'Admin User',
+      email: 'admin@vendorbridge.com',
+      password: hashedPwd,
+      role: 'Admin',
+      first_name: 'Admin',
+      last_name: 'User',
+      phone_number: '8888888888',
+      country: 'India',
+      additional_info: 'Administrator Account'
+    },
+    {
       name: 'Procurement Officer',
       email: 'officer@vendorbridge.com',
       password: hashedPwd,

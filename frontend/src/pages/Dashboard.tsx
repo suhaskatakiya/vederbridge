@@ -26,22 +26,47 @@ interface RFQ {
 }
 
 interface RecentPO {
+  id: number;
+  po_id?: number;
   po_number: string;
   vendor_name: string;
   total_calculation: string;
   status: string;
+  l1_status: string;
+  l2_status: string;
+}
+
+interface UserInfo {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+}
+
+interface ActivityLogItem {
+  id: number;
+  action: string;
+  details: string;
+  created_at: string;
+  user_name: string | null;
+  user_role: string | null;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const { user, apiFetch, error, clearError } = useAuth();
   
   const [rfqs, setRfqs] = useState<RFQ[]>([]);
-  const [recentPOs, setRecentPOs] = useState<RecentPO[]>([
-    { po_number: 'Po1', vendor_name: 'Infra Supplies', total_calculation: '87000', status: 'Approved' },
-    { po_number: 'Po2', vendor_name: 'Techcore LTD', total_calculation: '140000', status: 'Pending' },
-    { po_number: 'Po3', vendor_name: 'OfficeNeed Co', total_calculation: '39900', status: 'Draft' }
-  ]);
+  const [recentPOs, setRecentPOs] = useState<RecentPO[]>([]);
+  const [usersList, setUsersList] = useState<UserInfo[]>([]);
+  const [vendorsList, setVendorsList] = useState<any[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Helper functions for safe PO status lookups to prevent null/undefined TypeError crashes
+  const getPOStatus = (p: any) => p?.status || p?.po_status || 'Draft';
+  const getPOL1Status = (p: any) => p?.l1_status || 'Pending';
+  const getPOL2Status = (p: any) => p?.l2_status || 'Pending';
 
   // RFQ Creation Stepper Wizard State (Step 1, 2, 3)
   const [rfqWizardStep, setRfqWizardStep] = useState<1 | 2 | 3>(1);
@@ -63,10 +88,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [newItemUnit, setNewItemUnit] = useState('NOS');
 
   // Assigned vendors state
-  const [assignedVendors, setAssignedVendors] = useState<string[]>([
-    'Infra Supplies Pvt Ltd',
-    'Techcore LTD'
-  ]);
+  const [assignedVendors, setAssignedVendors] = useState<string[]>(['Infra Supplies', 'Techcore LTD']);
   const [availableVendorsList, setAvailableVendorsList] = useState<string[]>([]);
   const [selectedVendorToAssign, setSelectedVendorToAssign] = useState('');
 
@@ -74,27 +96,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [uploadedSpecFileName, setUploadedSpecFileName] = useState('');
   const [rfqFormError, setRfqFormError] = useState('');
 
-  // Fetch details
+  // Fetch all details
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
+      // Fetch open RFQs
       const rfqData = await apiFetch('/api/rfqs');
       setRfqs(rfqData || []);
 
+      // Fetch POs
       const poData = await apiFetch('/api/po').catch(() => []);
-      if (poData && poData.length > 0) {
-        setRecentPOs(poData.slice(0, 3).map((p: any) => ({
-          po_number: p.po_number || 'Po#',
-          vendor_name: p.vendor_name || 'Vendor',
-          total_calculation: p.total_calculation || '0',
-          status: p.po_status || 'Draft'
-        })));
+      setRecentPOs(poData || []);
+
+      // Fetch vendors to populate assignment dropdown & metrics (Admin, Manager, Officer only)
+      if (user?.role !== 'Vendor') {
+        const vendorData = await apiFetch('/api/vendors').catch(() => []);
+        setVendorsList(vendorData || []);
+        if (vendorData) {
+          setAvailableVendorsList(vendorData.map((v: any) => v.company_name));
+        }
       }
 
-      // Fetch vendors to populate assignment dropdown
-      const vendorData = await apiFetch('/api/vendors').catch(() => []);
-      if (vendorData) {
-        setAvailableVendorsList(vendorData.map((v: any) => v.company_name));
+      // Fetch activity logs (Admin, Manager, Officer only)
+      if (user?.role !== 'Vendor') {
+        const logsData = await apiFetch('/api/activity-logs').catch(() => []);
+        setActivityLogs(logsData || []);
+      }
+
+      // Fetch users (Admin only)
+      if (user?.role === 'Admin') {
+        const usersData = await apiFetch('/api/users').catch(() => []);
+        setUsersList(usersData || []);
       }
     } catch (err) {
       // Handled globally
@@ -172,149 +204,127 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       setIsRfqModalOpen(false);
       setRfqWizardStep(1);
       fetchDashboardData();
-      alert(`RFQ successfully saved and posted!`);
+      (window as any).showToast?.('success', 'RFQ successfully created & published!');
     } catch (err: any) {
       setRfqFormError(err.message || 'Failed to save RFQ.');
     }
   };
 
-  const activeRFQsCount = rfqs.filter(r => r.status === 'Open').length;
-  // Dynamic pending approval count (POs not fully paid/received)
-  const pendingApprovalsCount = recentPOs.filter(p => p.status.toLowerCase() === 'pending' || p.status.toLowerCase() === 'draft').length;
+  // --------------------------------------------------------
+  // SIDEBAR BUILDERS BASED ON ROLE (SAP / Odoo inspired)
+  // --------------------------------------------------------
+  const renderSidebarLinks = () => {
+    const role = user?.role || 'Guest';
 
-  return (
-    <div className="app-container">
-      {/* Sidebar Navigation matching Left Menu from Mockup 2 */}
-      <aside className="sidebar">
-        <div>
-          <div className="brand">
-            <div className="brand-icon">VB</div>
-            <span className="brand-text">VendorBridge</span>
-          </div>
-
+    switch (role) {
+      case 'Admin':
+        return (
           <ul className="nav-links">
-            <li className="nav-item">
-              <a href="#" className="nav-link active" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>
-                - Dashboard
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('vendors'); }}>
-                - Vendors
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>
-                - RFQ's
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>
-                - Quotations
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>
-                - Approvals
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>
-                - Purchase orders
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>
-                - Invoices
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('analytics'); }}>
-                - Reports
-              </a>
-            </li>
-            <li className="nav-item">
-              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>
-                - Activity
-              </a>
-            </li>
+            <li className="nav-item"><a href="#" className="nav-link active" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Dashboard</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('users'); }}>- Users</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('vendors'); }}>- Vendors</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- RFQ's</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Purchase orders</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Invoices</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('analytics'); }}>- Reports</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>- Activity Logs</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('settings'); }}>- Settings</a></li>
           </ul>
-        </div>
+        );
+      case 'Procurement Officer':
+        return (
+          <ul className="nav-links">
+            <li className="nav-item"><a href="#" className="nav-link active" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Dashboard</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('vendors'); }}>- Vendors</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- RFQ's</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Quotations</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>- Approvals</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Purchase orders</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Invoices</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('analytics'); }}>- Reports</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>- Activity</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('settings'); }}>- Settings</a></li>
+          </ul>
+        );
+      case 'Manager':
+        return (
+          <ul className="nav-links">
+            <li className="nav-item"><a href="#" className="nav-link active" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Dashboard</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>- Approvals</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('analytics'); }}>- Reports</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('audit'); }}>- Activity</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('settings'); }}>- Settings</a></li>
+          </ul>
+        );
+      case 'Vendor':
+        return (
+          <ul className="nav-links">
+            <li className="nav-item"><a href="#" className="nav-link active" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Dashboard</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- RFQ's</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('dashboard'); }}>- Purchase Orders</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('profile'); }}>- Profile</a></li>
+            <li className="nav-item"><a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); onNavigate('settings'); }}>- Settings</a></li>
+          </ul>
+        );
+      default:
+        return null;
+    }
+  };
 
-        {user && (
-          <div className="user-badge" style={{ marginTop: 'auto' }}>
-            <div className="user-avatar">{user.name.charAt(0).toUpperCase()}</div>
-            <div className="user-info">
-              <span className="user-name">{user.name}</span>
-              <span className="user-role">{user.role}</span>
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* Main Workspace viewport */}
-      <main className="main-content">
-        {error && (
-          <div className="alert alert-danger" style={{ position: 'sticky', top: '0', zIndex: 10 }}>
-            <span>{error}</span>
-            <button onClick={clearError} style={{ background: 'transparent', border: 'none', color: 'inherit', marginLeft: 'auto', cursor: 'pointer' }}>✕</button>
-          </div>
-        )}
-
+  // --------------------------------------------------------
+  // DASHBOARD VIEWPORTS BY ROLE (SaaS inspired layouts)
+  // --------------------------------------------------------
+  
+  // 1. ADMIN DASHBOARD
+  const renderAdminDashboard = () => {
+    return (
+      <div>
         <div className="header-row">
           <div>
-            <h1 className="page-title">Dashboard</h1>
-            <p className="page-subtitle">Welcome back, {user?.name || 'User'} ({user?.role || 'Guest'}) - Today's Overview</p>
+            <h1 className="page-title">Admin Dashboard</h1>
+            <p className="page-subtitle">Welcome back, {user?.name} - ERP Administration Control</p>
           </div>
         </div>
 
-        {/* 4 Aligned Stat Cards matching Mockup 2 Screen 3 */}
-        <section className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem' }}>
-          <div className="glass-panel stat-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', fontWeight: 700 }}>{isLoading ? '...' : activeRFQsCount}</div>
-            <span className="stat-label" style={{ fontSize: '0.85rem' }}>Active RFQ's</span>
+        {/* 4 Stats Cards */}
+        <section className="stats-grid">
+          <div className="glass-panel stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('users')}>
+            <span className="stat-label">Total Users</span>
+            <div className="stat-value">{isLoading ? '...' : usersList.length}</div>
           </div>
-          <div className="glass-panel stat-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', fontWeight: 700 }}>{isLoading ? '...' : pendingApprovalsCount}</div>
-            <span className="stat-label" style={{ fontSize: '0.85rem' }}>Pending Approvals</span>
+          <div className="glass-panel stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('vendors')}>
+            <span className="stat-label">Total Vendors</span>
+            <div className="stat-value" style={{ color: 'var(--success)' }}>{isLoading ? '...' : vendorsList.length}</div>
           </div>
-          <div className="glass-panel stat-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--secondary)' }}>$ 2.3L</div>
-            <span className="stat-label" style={{ fontSize: '0.85rem' }}>PO's this month</span>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Active RFQs</span>
+            <div className="stat-value">{isLoading ? '...' : rfqs.filter(r => r.status === 'Open').length}</div>
           </div>
-          <div className="glass-panel stat-card" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--danger)' }}>3</div>
-            <span className="stat-label" style={{ fontSize: '0.85rem' }}>overdue invoices</span>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Total Spend</span>
+            <div className="stat-value" style={{ color: 'var(--secondary)' }}>$12.4 L</div>
           </div>
         </section>
 
-        {/* Widgets section matching Mockup 2 columns */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem', marginTop: '2rem' }}>
-          
-          {/* Left column widget: Recent Purchase Orders */}
+        {/* Dynamic Spend categories and Logs feed */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', marginTop: '2rem' }}>
           <div>
-            <h3 className="section-title">Recent Purchase Orders</h3>
-            <div className="table-container">
+            <h3 className="section-title">System Activity Logs</h3>
+            <div className="table-container" style={{ maxHeight: '250px', overflowY: 'auto' }}>
               <table className="modern-table">
                 <thead>
                   <tr>
-                    <th>PO#</th>
-                    <th>Vendor</th>
-                    <th>Amount</th>
-                    <th>Status</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                    <th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentPOs.map((po, index) => (
-                    <tr key={index}>
-                      <td style={{ fontWeight: 600 }}>{po.po_number}</td>
-                      <td>{po.vendor_name}</td>
-                      <td style={{ fontWeight: 600 }}>
-                        ${parseFloat(po.total_calculation).toLocaleString('en-US')}
-                      </td>
-                      <td>
-                        <span className={`badge badge-${po.status.toLowerCase()}`}>{po.status}</span>
-                      </td>
+                  {activityLogs.slice(0, 5).map((log, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>{log.action}</td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{log.details}</td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(log.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -322,28 +332,89 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* Right column widget: Spending Trends chart placeholder */}
-          <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '0.5px' }}>
-              Spending Trends last 6 months
+          <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1.25rem', letterSpacing: '0.5px' }}>
+              Procurement Category Weights
             </h4>
-            
-            {/* Visual CSS Chart representation matching mockup icon */}
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', height: '120px', width: '100%', maxWidth: '200px', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', margin: '1rem 0' }}>
-              <div style={{ flex: 1, height: '40%', background: 'var(--primary)', borderRadius: '4px 4px 0 0' }} title="Jan" />
-              <div style={{ flex: 1, height: '60%', background: 'var(--secondary)', borderRadius: '4px 4px 0 0' }} title="Feb" />
-              <div style={{ flex: 1, height: '35%', background: 'var(--primary)', borderRadius: '4px 4px 0 0' }} title="Mar" />
-              <div style={{ flex: 1, height: '80%', background: 'var(--success)', borderRadius: '4px 4px 0 0' }} title="Apr" />
-              <div style={{ flex: 1, height: '55%', background: 'var(--warning)', borderRadius: '4px 4px 0 0' }} title="May" />
-              <div style={{ flex: 1, height: '95%', background: 'var(--secondary)', borderRadius: '4px 4px 0 0' }} title="Jun" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                  <span>IT Hardware</span>
+                  <strong>₹4.8L</strong>
+                </div>
+                <div style={{ height: '6px', background: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: '40%', height: '100%', background: 'var(--primary)' }} />
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                  <span>Furniture</span>
+                  <strong>₹3.2L</strong>
+                </div>
+                <div style={{ height: '6px', background: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: '30%', height: '100%', background: 'var(--success)' }} />
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                  <span>Logistics</span>
+                  <strong>₹2.3L</strong>
+                </div>
+                <div style={{ height: '6px', background: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: '20%', height: '100%', background: 'var(--secondary)' }} />
+                </div>
+              </div>
             </div>
-            
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Automated Analytics reports summary</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // 2. PROCUREMENT OFFICER DASHBOARD
+  const renderProcurementOfficerDashboard = () => {
+    const activeRFQsCount = rfqs.filter(r => r.status === 'Open').length;
+    const pendingApprovalsCount = recentPOs.filter(p => {
+      const s = getPOStatus(p).toLowerCase();
+      return s === 'pending' || s === 'draft';
+    }).length;
+
+    return (
+      <div>
+        <div className="header-row">
+          <div>
+            <h1 className="page-title">Procurement Officer Dashboard</h1>
+            <p className="page-subtitle">Welcome back, {user?.name} - Sourcing Pipeline</p>
           </div>
         </div>
 
-        {/* Quick actions row matching bottom of Mockup 2 Screen 3 */}
-        <section style={{ display: 'flex', gap: '1rem', marginTop: '2.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
+        {/* 4 Stats Cards */}
+        <section className="stats-grid">
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Active RFQ's</span>
+            <div className="stat-value">{isLoading ? '...' : activeRFQsCount}</div>
+          </div>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Pending Approvals</span>
+            <div className="stat-value" style={{ color: 'var(--warning)' }}>{isLoading ? '...' : pendingApprovalsCount}</div>
+          </div>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Open Purchase Orders</span>
+            <div className="stat-value" style={{ color: 'var(--success)' }}>
+              {isLoading ? '...' : recentPOs.filter(p => {
+                const s = getPOStatus(p);
+                return s === 'Sent' || s === 'Received';
+              }).length}
+            </div>
+          </div>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Monthly Spend</span>
+            <div className="stat-value" style={{ color: 'var(--secondary)' }}>$ 2.3L</div>
+          </div>
+        </section>
+
+        {/* Quick Actions Row */}
+        <section style={{ display: 'flex', gap: '1rem', marginBottom: '2.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1.5rem' }}>
           <button className="btn btn-primary" onClick={() => { setRfqWizardStep(1); setIsRfqModalOpen(true); }}>
             + new RFQ
           </button>
@@ -351,12 +422,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             Add Vendor
           </button>
           <button className="btn btn-secondary" onClick={() => onNavigate('analytics')}>
-            View Invoices
+            View Reports
           </button>
         </section>
 
-        {/* Dynamic RFQ list below for procurement view */}
-        <section style={{ marginTop: '2.5rem' }}>
+        {/* Open RFQs List */}
+        <section>
           <h2 className="section-title">Open RFQs Matrix</h2>
           {isLoading ? (
             <p>Fetching RFQs...</p>
@@ -378,24 +449,228 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                     <div className="rfq-meta" style={{ marginBottom: '1rem' }}>
                       <span>Due: {new Date(rfq.deadline).toLocaleDateString()}</span>
                     </div>
-                    {user?.role === 'Vendor' ? (
-                      <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => onNavigate('submit-quotation', { rfqId: rfq.id, rfqTitle: rfq.title })}>
-                        Submit Quotation
-                      </button>
-                    ) : (
-                      <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => onNavigate('compare', { rfqId: rfq.id, rfqTitle: rfq.title })}>
-                        Compare Quotations
-                      </button>
-                    )}
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ width: '100%' }} 
+                      onClick={() => onNavigate('compare', { rfqId: rfq.id, rfqTitle: rfq.title })}
+                    >
+                      Compare Quotations
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </section>
+      </div>
+    );
+  };
+
+  // 3. MANAGER / APPROVER DASHBOARD
+  const renderManagerDashboard = () => {
+    const pendingPOs = recentPOs.filter(p => getPOL1Status(p) === 'Pending' || getPOL2Status(p) === 'Pending');
+    const approvedCount = recentPOs.filter(p => getPOL1Status(p) === 'Approved' && getPOL2Status(p) === 'Approved').length;
+    const rejectedCount = recentPOs.filter(p => getPOL1Status(p) === 'Rejected' || getPOL2Status(p) === 'Rejected').length;
+
+    return (
+      <div>
+        <div className="header-row">
+          <div>
+            <h1 className="page-title">Manager Dashboard</h1>
+            <p className="page-subtitle">Welcome back, {user?.name} - Spend approvals pipeline</p>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <section className="stats-grid">
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Pending Approvals</span>
+            <div className="stat-value" style={{ color: 'var(--warning)' }}>{isLoading ? '...' : pendingPOs.length}</div>
+          </div>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Approved POs</span>
+            <div className="stat-value" style={{ color: 'var(--success)' }}>{isLoading ? '...' : approvedCount}</div>
+          </div>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Rejected POs</span>
+            <div className="stat-value" style={{ color: 'var(--danger)' }}>{isLoading ? '...' : rejectedCount}</div>
+          </div>
+        </section>
+
+        {/* Timeline / Actionable pending lists */}
+        <section style={{ marginTop: '2rem' }}>
+          <h2 className="section-title">Awaiting Approval Workflow</h2>
+          {isLoading ? (
+            <p>Loading approvals...</p>
+          ) : pendingPOs.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)' }}>No pending purchase order approvals.</p>
+          ) : (
+            <div className="table-container">
+              <table className="modern-table">
+                <thead>
+                  <tr>
+                    <th>PO Number</th>
+                    <th>Vendor</th>
+                    <th>Value</th>
+                    <th>L1 Stage</th>
+                    <th>L2 Stage</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingPOs.map(po => (
+                    <tr key={po.id || po.po_id}>
+                      <td style={{ fontWeight: 600 }}>{po.po_number}</td>
+                      <td>{po.vendor_name}</td>
+                      <td style={{ fontWeight: 600 }}>${parseFloat(po.total_calculation).toLocaleString()}</td>
+                      <td>
+                        <span className={`badge badge-${getPOL1Status(po).toLowerCase()}`}>{getPOL1Status(po)}</span>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${getPOL2Status(po).toLowerCase()}`}>{getPOL2Status(po)}</span>
+                      </td>
+                      <td>
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                          onClick={() => onNavigate('approval-workflow', { poId: po.id || po.po_id })}
+                        >
+                          Review & Action
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  };
+
+  // 4. VENDOR DASHBOARD
+  const renderVendorDashboard = () => {
+    // Filter RFQs assigned to this vendor category or matching open criteria
+    const openInvitations = rfqs.filter(r => r.status === 'Open');
+    
+    // Find POs matching this vendor
+    const vendorPOs = recentPOs.filter(p => p.vendor_name.toLowerCase().includes(user?.name.toLowerCase() || 'infra'));
+
+    return (
+      <div>
+        <div className="header-row">
+          <div>
+            <h1 className="page-title">Supplier Dashboard</h1>
+            <p className="page-subtitle">Welcome back, {user?.name} - Sales & Quotation Hub</p>
+          </div>
+        </div>
+
+        {/* Vendor Stats */}
+        <section className="stats-grid">
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Open RFQ Invitations</span>
+            <div className="stat-value">{isLoading ? '...' : openInvitations.length}</div>
+          </div>
+          <div className="glass-panel stat-card">
+            <span className="stat-label">Purchase Orders Received</span>
+            <div className="stat-value" style={{ color: 'var(--success)' }}>{isLoading ? '...' : vendorPOs.length}</div>
+          </div>
+        </section>
+
+        {/* Actionable Invitations Matrix */}
+        <section style={{ marginTop: '2.5rem' }}>
+          <h2 className="section-title">Assigned RFQs Matrix</h2>
+          {isLoading ? (
+            <p>Loading RFQs...</p>
+          ) : openInvitations.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)' }}>No open RFQ invitations matching your supplier scope.</p>
+          ) : (
+            <div className="rfq-grid">
+              {openInvitations.map(rfq => (
+                <div key={rfq.id} className="glass-panel rfq-card">
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span className="badge badge-open">Open Invitation</span>
+                      <span style={{ color: 'var(--secondary)', fontSize: '0.8rem', fontWeight: 600 }}>{rfq.assigned_category}</span>
+                    </div>
+                    <h3 className="rfq-title">{rfq.title}</h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.5rem 0' }}>{rfq.product_details}</p>
+                  </div>
+                  <div>
+                    <div className="rfq-meta" style={{ marginBottom: '1rem' }}>
+                      <span>Due: {new Date(rfq.deadline).toLocaleDateString()}</span>
+                    </div>
+                    <button 
+                      className="btn btn-primary" 
+                      style={{ width: '100%' }} 
+                      onClick={() => onNavigate('submit-quotation', { rfqId: rfq.id, rfqTitle: rfq.title })}
+                    >
+                      Submit Bid Proposal
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  };
+
+  const renderActiveDashboardBody = () => {
+    const role = user?.role || 'Guest';
+    switch (role) {
+      case 'Admin':
+        return renderAdminDashboard();
+      case 'Procurement Officer':
+        return renderProcurementOfficerDashboard();
+      case 'Manager':
+        return renderManagerDashboard();
+      case 'Vendor':
+        return renderVendorDashboard();
+      default:
+        return renderProcurementOfficerDashboard();
+    }
+  };
+
+  return (
+    <div className="app-container">
+      {/* Sidebar Navigation */}
+      <aside className="sidebar">
+        <div>
+          <div className="brand">
+            <div className="brand-icon">VB</div>
+            <span className="brand-text">VendorBridge</span>
+          </div>
+
+          {renderSidebarLinks()}
+        </div>
+
+        {user && (
+          <div className="user-badge">
+            <div className="user-avatar">{user.name.charAt(0).toUpperCase()}</div>
+            <div className="user-info">
+              <span className="user-name">{user.name}</span>
+              <span className="user-role">{user.role}</span>
+            </div>
+          </div>
+        )}
+      </aside>
+
+      {/* Main Workspace viewport */}
+      <main className="main-content">
+        {error && (
+          <div className="alert alert-danger" style={{ position: 'sticky', top: '0', zIndex: 10 }}>
+            <span>{error}</span>
+            <button onClick={clearError} style={{ background: 'transparent', border: 'none', color: 'inherit', marginLeft: 'auto', cursor: 'pointer' }}>✕</button>
+          </div>
+        )}
+
+        {renderActiveDashboardBody()}
       </main>
 
-      {/* RFQ Stepper Wizard Modal matching Mockup 3 Screen 5 */}
+      {/* RFQ Stepper Wizard Modal matching Screen 5 */}
       {isRfqModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 1000 }}>
           <div className="glass-panel modal-content" style={{ maxWidth: '850px', width: '100%' }}>

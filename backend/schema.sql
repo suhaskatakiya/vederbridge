@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number VARCHAR(50),
     country VARCHAR(100),
     additional_info TEXT,
+    status ENUM('Active', 'Disabled') DEFAULT 'Active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

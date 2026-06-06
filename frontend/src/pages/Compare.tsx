@@ -71,6 +71,25 @@ export const Compare: React.FC<CompareProps> = ({ rfqId, rfqTitle, onNavigate })
 
   const lowestQuoteId = getLowestQuoteId();
 
+  // Find fastest delivery quote
+  const getFastestQuoteId = () => {
+    if (quotes.length === 0) return null;
+    let fastestDelivery = Infinity;
+    let fastestId = null;
+
+    quotes.forEach(q => {
+      const delivery = parseInt(q.delivery_timeline.replace(/[^0-9]/g, '')) || 999;
+      if (delivery < fastestDelivery) {
+        fastestDelivery = delivery;
+        fastestId = q.id;
+      }
+    });
+
+    return fastestId;
+  };
+
+  const fastestQuoteId = getFastestQuoteId();
+
   // Initiate approval workflow transition
   const handleSelectQuote = (quote: Quotation) => {
     setSelectedQuoteForWorkflow(quote);
@@ -188,17 +207,22 @@ export const Compare: React.FC<CompareProps> = ({ rfqId, rfqTitle, onNavigate })
                       
                       {quotes.map(q => {
                         const isLowest = q.id === lowestQuoteId;
+                        const isFastest = q.id === fastestQuoteId;
                         return (
                           <th key={q.id} style={{
                             textAlign: 'center',
-                            background: isLowest ? 'var(--success-bg)' : 'hsla(224, 25%, 12%, 0.8)',
-                            color: isLowest ? 'var(--success)' : 'var(--text-primary)',
-                            border: isLowest ? '2px solid var(--success)' : '1px solid var(--border-color)',
+                            background: isLowest ? 'var(--success-bg)' : isFastest ? 'rgba(58, 123, 213, 0.08)' : 'hsla(224, 25%, 12%, 0.8)',
+                            color: isLowest ? 'var(--success)' : isFastest ? 'var(--secondary)' : 'var(--text-primary)',
+                            border: isLowest ? '2px solid var(--success)' : isFastest ? '1.5px solid var(--secondary)' : '1px solid var(--border-color)',
                             borderBottom: 'none',
-                            padding: '1.25rem',
-                            minWidth: '200px'
+                            padding: '1rem',
+                            minWidth: '220px'
                           }}>
-                            {q.company_name || q.vendor_name} {isLowest && '(lowest)'}
+                            <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>{q.company_name || q.vendor_name}</div>
+                            <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                              {isLowest && <span className="badge badge-approved" style={{ fontSize: '0.65rem' }}>Lowest Price</span>}
+                              {isFastest && <span className="badge badge-open" style={{ fontSize: '0.65rem' }}>Fastest Delivery</span>}
+                            </div>
                           </th>
                         );
                       })}
@@ -317,15 +341,26 @@ export const Compare: React.FC<CompareProps> = ({ rfqId, rfqTitle, onNavigate })
                             {q.status === 'Approved' ? (
                               <span style={{ color: 'var(--success)', fontWeight: 'bold', fontSize: '0.85rem' }}>✓ Selected & Approved</span>
                             ) : (
-                              <button
-                                type="button"
-                                className={`btn ${isLowest ? 'btn-success' : 'btn-secondary'}`}
-                                style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', width: '100%' }}
-                                onClick={() => handleSelectQuote(q)}
-                                disabled={isProcessing}
-                              >
-                                {isLowest ? 'Select & Approve' : 'Select'}
-                              </button>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <button
+                                  type="button"
+                                  className={`btn ${isLowest ? 'btn-success' : 'btn-primary'}`}
+                                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', width: '100%' }}
+                                  onClick={() => handleSelectQuote(q)}
+                                  disabled={isProcessing}
+                                >
+                                  Select Vendor
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', width: '100%' }}
+                                  onClick={() => (window as any).showToast?.('success', `${q.company_name || q.vendor_name} successfully shortlisted!`)}
+                                  disabled={isProcessing}
+                                >
+                                  Shortlist
+                                </button>
+                              </div>
                             )}
                           </td>
                         );

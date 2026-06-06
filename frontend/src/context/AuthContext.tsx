@@ -13,7 +13,17 @@ interface AuthContextType {
   error: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string, role: string) => Promise<boolean>;
+  register: (
+    name: string,
+    email: string,
+    password: string,
+    role: string,
+    first_name?: string,
+    last_name?: string,
+    phone_number?: string,
+    country?: string,
+    additional_info?: string
+  ) => Promise<boolean>;
   logout: () => void;
   apiFetch: (endpoint: string, options?: RequestInit) => Promise<any>;
   clearError: () => void;
@@ -123,12 +133,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (name: string, email: string, password: string, role: string): Promise<boolean> => {
+  const register = async (
+    name: string,
+    email: string,
+    password: string,
+    role: string,
+    first_name?: string,
+    last_name?: string,
+    phone_number?: string,
+    country?: string,
+    additional_info?: string
+  ): Promise<boolean> => {
     setError(null);
     try {
       const data = await apiFetch('/register', {
         method: 'POST',
-        body: JSON.stringify({ name, email, password, role })
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role,
+          first_name: first_name || name.split(' ')[0],
+          last_name: last_name || name.split(' ')[1] || 'Corp',
+          phone_number,
+          country,
+          additional_info
+        })
       });
 
       if (data.token && data.user) {

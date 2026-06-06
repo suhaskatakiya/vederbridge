@@ -117,9 +117,8 @@ export const VendorManager: React.FC<VendorManagerProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleUpdateStatus = async (vendorId: number, currentStatus: string) => {
-    const nextStatus = currentStatus === 'Blocked' ? 'Active' : 'Blocked';
-    const confirmMsg = `Are you sure you want to ${nextStatus === 'Blocked' ? 'Block' : 'Activate'} this vendor?`;
+  const handleUpdateStatus = async (vendorId: number, nextStatus: string) => {
+    const confirmMsg = `Are you sure you want to change this vendor's status to ${nextStatus}?`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -305,13 +304,44 @@ export const VendorManager: React.FC<VendorManagerProps> = ({ onNavigate }) => {
                           View
                         </button>
                         {user?.role === 'Admin' && (
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', color: v.status === 'Blocked' ? 'var(--success)' : 'var(--danger)' }}
-                            onClick={() => handleUpdateStatus(v.id, v.status)}
-                          >
-                            {v.status === 'Blocked' ? 'Unblock' : 'Block'}
-                          </button>
+                          <>
+                            {v.status === 'Pending Approval' && (
+                              <>
+                                <button
+                                  className="btn btn-success"
+                                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', color: 'var(--bg-main)' }}
+                                  onClick={() => handleUpdateStatus(v.id, 'Active')}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', color: 'var(--danger)' }}
+                                  onClick={() => handleUpdateStatus(v.id, 'Blocked')}
+                                >
+                                  Block
+                                </button>
+                              </>
+                            )}
+                            {v.status === 'Active' && (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', color: 'var(--danger)' }}
+                                onClick={() => handleUpdateStatus(v.id, 'Blocked')}
+                              >
+                                Block
+                              </button>
+                            )}
+                            {v.status === 'Blocked' && (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', color: 'var(--success)' }}
+                                onClick={() => handleUpdateStatus(v.id, 'Active')}
+                              >
+                                Unblock
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>

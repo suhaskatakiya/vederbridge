@@ -57,6 +57,15 @@ export const registerUser = async (req, res) => {
 
     const userId = result.insertId;
 
+    // 6b. Auto-create vendor profile if registering as a Vendor
+    if (role === 'Vendor') {
+      const companyName = `${name} Corp`;
+      await db.query(
+        'INSERT INTO vendor_profiles (user_id, company_name, phone, address) VALUES (?, ?, ?, ?)',
+        [userId, companyName, phone_number || null, country ? `${country}. ${additional_info || ''}`.trim() : null]
+      );
+    }
+
     // 7. Generate JWT token
     const token = jwt.sign(
       { id: userId, name, email, role },
@@ -100,6 +109,11 @@ export const loginUser = async (req, res) => {
     }
 
     const user = users[0];
+
+    // Check if account is disabled
+    if (user.status === 'Disabled') {
+      return res.status(403).json({ message: 'Your account has been disabled. Please contact the administrator.' });
+    }
 
     // 3. Check password
     const isMatch = await bcrypt.compare(password, user.password);

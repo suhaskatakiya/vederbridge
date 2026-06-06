@@ -8,6 +8,7 @@ import quotationRoutes from './routes/quotationRoutes.js';
 import poRoutes from './routes/poRoutes.js';
 import vendorRoutes from './routes/vendorRoutes.js';
 import activityRoutes from './routes/activityRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api/quotations', quotationRoutes);
 app.use('/api/po', poRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/activity-logs', activityRoutes);
+app.use('/api/users', userRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
