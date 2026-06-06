@@ -21,7 +21,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
     if (!val) {
       return 'Email is required.';
     } else if (!emailRegex.test(val)) {
-      return 'Please enter a valid email address (e.g., name@example.com).';
+      return 'Please enter a valid email address.';
     }
     return '';
   };
@@ -51,12 +51,15 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="auth-wrapper">
-      <div className="glass-panel auth-card">
+    <div className="auth-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '2rem' }}>
+      <div className="glass-panel auth-card" style={{ maxWidth: '440px', width: '100%' }}>
         <div className="auth-header">
-          <div className="auth-logo">VB</div>
-          <h1 className="page-title">VendorBridge</h1>
-          <p className="page-subtitle">Sign in to manage RFQs and Bids</p>
+          {/* Circular avatar placeholder "Photo" matching Mockup 1 Screen 1 */}
+          <div className="auth-logo" style={{ borderRadius: '50%', width: '80px', height: '80px', fontSize: '0.85rem', fontWeight: 600 }}>
+            Photo
+          </div>
+          <h1 className="page-title">Login Screen</h1>
+          <p className="page-subtitle">Sign in to VendorBridge ERP</p>
         </div>
 
         {error && (
@@ -67,17 +70,18 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
 
         <form onSubmit={handleSubmit} noValidate>
           <div className="form-group">
-            <label className="form-label" htmlFor="email">Email Address</label>
+            <label className="form-label" htmlFor="email">Username</label>
             <input
               id="email"
               type="email"
               className={`form-input ${emailError ? 'error' : ''}`}
-              placeholder="you@company.com"
+              placeholder="email@address.com"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
                 if (emailError) setEmailError(validateEmail(e.target.value));
               }}
+              required
             />
             {emailError && <span className="form-error">{emailError}</span>}
           </div>
@@ -94,6 +98,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
                 setPassword(e.target.value);
                 if (passError) setPassError(e.target.value ? '' : 'Password is required.');
               }}
+              required
             />
             {passError && <span className="form-error">{passError}</span>}
           </div>
@@ -104,7 +109,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
             style={{ width: '100%', marginTop: '1rem' }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Authenticating...' : 'Sign In'}
+            {isSubmitting ? 'Verifying...' : 'Login Button'}
           </button>
         </form>
 

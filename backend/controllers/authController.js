@@ -17,13 +17,16 @@ const validateEmail = (email) => {
 // @route   POST /register
 // @access  Public
 export const registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { email, password, role, first_name, last_name, phone_number, country, additional_info } = req.body;
 
   try {
     // 1. Basic validation
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({ message: 'Please provide all fields (name, email, password, role).' });
+    if (!first_name || !last_name || !email || !password || !role) {
+      return res.status(400).json({ message: 'Please provide first name, last name, email, password, and role.' });
     }
+
+    // Combine for name column representation
+    const name = `${first_name} ${last_name}`.trim();
 
     // 2. Validate email format
     if (!validateEmail(email)) {
@@ -48,8 +51,8 @@ export const registerUser = async (req, res) => {
 
     // 6. Insert user into database
     const [result] = await db.query(
-      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-      [name, email, hashedPassword, role]
+      'INSERT INTO users (name, email, password, role, first_name, last_name, phone_number, country, additional_info) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email, hashedPassword, role, first_name, last_name, phone_number || null, country || null, additional_info || null]
     );
 
     const userId = result.insertId;

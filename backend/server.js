@@ -6,6 +6,8 @@ import authRoutes from './routes/authRoutes.js';
 import rfqRoutes from './routes/rfqRoutes.js';
 import quotationRoutes from './routes/quotationRoutes.js';
 import poRoutes from './routes/poRoutes.js';
+import vendorRoutes from './routes/vendorRoutes.js';
+import activityRoutes from './routes/activityRoutes.js';
 
 dotenv.config();
 
@@ -34,6 +36,8 @@ app.use('/', authRoutes);
 app.use('/api/rfqs', rfqRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/po', poRoutes);
+app.use('/api/vendors', vendorRoutes);
+app.use('/api/activity-logs', activityRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

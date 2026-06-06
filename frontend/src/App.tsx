@@ -5,6 +5,11 @@ import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { Compare } from './pages/Compare';
 import { PurchaseOrder } from './pages/PurchaseOrder';
+import { VendorManager } from './pages/VendorManager';
+import { ReportsAnalytics } from './pages/ReportsAnalytics';
+import { ActivityLog } from './pages/ActivityLog';
+import { SubmitQuotation } from './pages/SubmitQuotation';
+import { ApprovalWorkflow } from './pages/ApprovalWorkflow';
 
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -61,6 +66,12 @@ const AppContent: React.FC = () => {
   switch (currentPage) {
     case 'dashboard':
       return <Dashboard onNavigate={handleNavigate} />;
+    case 'vendors':
+      return <VendorManager onNavigate={handleNavigate} />;
+    case 'analytics':
+      return <ReportsAnalytics onNavigate={handleNavigate} />;
+    case 'audit':
+      return <ActivityLog onNavigate={handleNavigate} />;
     case 'compare':
       return (
         <Compare
@@ -72,6 +83,21 @@ const AppContent: React.FC = () => {
     case 'po':
       return (
         <PurchaseOrder
+          poId={pageParams.poId}
+          onNavigate={handleNavigate}
+        />
+      );
+    case 'submit-quotation':
+      return (
+        <SubmitQuotation
+          rfqId={pageParams.rfqId}
+          rfqTitle={pageParams.rfqTitle}
+          onNavigate={handleNavigate}
+        />
+      );
+    case 'approval-workflow':
+      return (
+        <ApprovalWorkflow
           poId={pageParams.poId}
           onNavigate={handleNavigate}
         />
